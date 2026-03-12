@@ -1,0 +1,113 @@
+case(
+# ============================================================
+# ============= OS MANDAMENTOS DE MOISÉS =====================
+# --- 1. REPROVAR QUANDO O STATUSL ATUAL DO PACOTE FOR ---
+
+when(${lsd_package.current_internal_status_label} = "Retido no posto fiscal", "Retido no posto fiscal"),
+when(${lsd_package.current_internal_status_label} = "Pacote não autorizado", "Pacote não autorizado"),
+when(${lsd_package.current_internal_status_label} = "Inativo", "Pacote Inativo"),
+when(${lsd_package.current_internal_status_label} = "Retirar nos Correios", "Retirar nos Correios"),
+when(${lsd_package.current_internal_status_label} = "Retido no posto após data promessa vencida", "Retido no posto (Promessa Vencida)"),
+when(${lsd_package.current_internal_status_label} = "Confiscado no posto fiscal", "Confiscado no posto fiscal"),
+when(${lsd_package.current_internal_status_label} = "Pacote extraviado", "Pacote com status atual de LSD",
+when(${lsd_package.current_internal_status_label} =  "Roubo / Furto", "Pacote com status atual de LSD",
+when(${lsd_package.current_internal_status_label} =  "Mercadoria avariada", "Pacote com status atual de LSD",
+  
+# --- 2. REPROVAR QUANDO PACOTE É MÚLTIPLO ---
+when(${base_package.is_multiple_package} = yes
+AND ${base_accounts.client_or_company_name} != "KALUNGA COMERCIO E INDUSTRIA GRAFICA LTDA"
+AND ${base_accounts.client_or_company_name} != "MERCADO LIVRE", "Pacote múltiplo"),
+
+# --- 3. REPROVAR QUANDO É FORA DE PERFIL COM MOVIMENTAÇÃO < 30 DIAS ---
+when(${package_deadline.is_refused_volume} = yes
+AND ${lsd_package_allien.days_since_last_loggi_move} <= 30, "Pacote fora de perfil com movimentação < 30 dias"),
+
+# --- 4. REPROVAR QUANDO NÃO HÁ EVIDÊNCIA DE COLETA ---
+when((is_null(${package_deadline.first_evidence_date}) 
+OR is_null(${lsd_package_allien.days_since_last_loggi_move})
+OR ${lsd_package_allien.days_since_last_loggi_move} = 0)
+AND(${lsd_package.current_internal_status_label} = "Pacote cancelado" 
+OR ${lsd_package.current_internal_status_label} = "Integrado"), "Pacote não coletado"),
+
+# --- 5. APROVAR COMO MERCADORIA AVARIADA QUANDO O PACOTE ESTIVER EM CONTEXTO DE SALVADOS, DESCARTE OU PRÉ-AVARIA ---
+when(contains(${last_enriched_sorting_record.destination_unit_load}, "AVAR") OR contains(${last_enriched_sorting_record.destination_unit_load}, "SALVADOS"), "Pacote em Salvados ou Descarte sem status de avaria"),
+
+# --- PARTICULARIDADES ---
+# --- 5. QUANDO O PACOTE É ENTREGUE NA DIREÇÃO DE DEVOLUÇÃO ---
+when((${base_accounts.client_or_company_name} = "MERCADO LIVRE" 
+OR ${base_accounts.client_or_company_name} = "RIACHUELO" 
+OR ${base_accounts.client_or_company_name} = "LOJAS RENNER SA" 
+OR ${base_accounts.client_or_company_name} = "SHPX LOGISTICA LTDA")
+AND ${current_package_direction.current_direction} = "Devolução" 
+AND ${lsd_package.current_internal_status_label} = "Entregue", "Não devolvido e entregue após o cancelamento"),
+
+# --- 6. QUANDO O PACOTE É ENTREGUE APÓS A DATA PROMESSA ---
+# --- Nota: data promessa menos data do último status ---
+when(${base_accounts.client_or_company_name} = "MERCADO LIVRE" 
+AND ${current_package_direction.current_direction} = "Entrega" 
+AND ${lsd_package.current_internal_status_label} = "Entregue" 
+AND diff_days(${package_deadline.promised_date_date}, ${lsd_package.current_internal_status_update_date}) > 3), "Entregue após a data de promessa - Cliente com Particularidade"),
+
+when(${base_accounts.client_or_company_name} = "SHPX LOGISTICA LTDA" 
+AND ${lsd_package.current_internal_status_label} = "Entregue" 
+AND ${current_package_direction.current_direction} = "Entrega" 
+AND diff_days(${package_deadline.promised_date_date}, ${lsd_package.current_internal_status_update_date}) > 10), "Entregue após a data de promessa - Cliente com Particularidade")
+
+  # --- 5. READY TO LOSS (Prazos de Perda) ---
+  when(${lsd_package_allien.is_ready_to_loss} = yes AND ${current_package_direction.current_direction} = "Devolução", "Perda do prazo de devolução"),
+  when(${lsd_package_allien.is_ready_to_loss} = yes AND ${current_package_direction.current_direction} = "Entrega", "Entrega atrasada"),
+
+[CONTINUAR A PARTIR DAQUI]
+ 
+  # --- 8. REGRA SHOPEE (SLA Regional de Devolução) ---
+  when(
+    ${base_accounts.client_or_company_name} = "SHPX LOGISTICA LTDA" 
+    AND ${lsd_package.current_internal_status_label} = "Retornado para o cliente"
+    AND (
+      ((${base_package.state} = "SP" OR ${base_package.state} = "ES" OR ${base_package.state} = "MG" OR ${base_package.state} = "RJ") AND diff_days(${package_return_process.start_date}, ${lsd_package.current_internal_status_update_date}) > 15)
+      OR 
+      ((${base_package.state} != "SP" AND ${base_package.state} != "ES" AND ${base_package.state} != "MG" AND ${base_package.state} != "RJ") AND diff_days(${package_return_process.start_date}, ${lsd_package.current_internal_status_update_date}) > 25)
+    ),
+    "Devolvido fora do prazo contratual"
+  ),
+  when(
+    ${base_accounts.client_or_company_name} = "SHPX LOGISTICA LTDA" 
+    AND ${lsd_package.current_internal_status_label} = "Retornado para o cliente",
+    "Pacote devolvido dentro do prazo"
+  ),
+
+ 
+
+  # --- 10. REGRAS DE ENTREGA (Atraso vs No Prazo) ---
+  when(
+    ${current_package_direction.current_direction} = "Entrega" 
+    AND ${lsd_package.current_internal_status_label} != "Entregue" 
+    AND ${package_deadline.days_since_promised_date} > 15, 
+    "Entrega atrasada"
+  ),
+  when(
+    ${current_package_direction.current_direction} = "Entrega" 
+    AND ${lsd_package.current_internal_status_label} != "Entregue", 
+    "Entrega em andamento dentro do prazo"
+  ),
+
+  # --- 11. REGRAS DE DEVOLUÇÃO (Atraso vs No Prazo) ---
+  when(
+    ${current_package_direction.current_direction} = "Devolução" 
+    AND ${lsd_package.current_internal_status_label} != "Retornado para o cliente"
+   AND ${lsd_package.current_internal_status_label} != "Entregue"  
+    AND ${dias_em_devo} > 20, 
+    "Perda do prazo de devolução"
+  ),
+  when(
+    ${current_package_direction.current_direction} = "Devolução" 
+    AND ${lsd_package.current_internal_status_label} != "Retornado para o cliente", 
+    "Devolução em andamento dentro do prazo"
+  ),
+
+  # --- 12. FINALIZADORES E WHITE-LIST ---
+  when(${lsd_package.current_internal_status_label} = "Entregue","Entregue"),
+  when(${lsd_package.current_internal_status_label} = "Retornado para o cliente", "Retornado para o cliente"),
+  
+  "Nenhum cenário mapeado - Analiar Manualmente"
+)
