@@ -1,0 +1,21 @@
+
+# =========================================================================.
+# --- Resolução Macro - APPROVED or NOT APPROVED
+
+if(${note_bubu} = "Pacote coletado a mais de 1 ano"
+OR ${note_bubu} = "Pacote não coletado"
+OR ${note_bubu} = "Pacote múltiplo"
+OR ${note_bubu} = "Pacote Inativo"
+OR ${note_bubu} = "Pacote não autorizado"
+OR ${note_bubu} = "Retirar nos Correios"
+OR ${note_bubu} = "Retido no posto fiscal"
+OR ${note_bubu} = "Retido no posto após data promessa vencida"
+OR ${note_bubu} = "Confiscado no posto fiscal"
+OR ${note_bubu} = "Pacote fora de perfil com movimentação < 30 dias"
+OR ${note_bubu} = "Pacote aguardando tratativa do embarcador"
+OR ${note_bubu} = "Pacote com status atual de LSD"
+OR ${note_bubu} = "Entregue"
+OR ${note_bubu} = "Retornado para o cliente"
+OR ${note_bubu} = "Entrega em andamento"
+OR ${note_bubu} = "Devolução em andamento"
+OR ${note_bubu} = "Nenhum cenário mapeado - Analiar Manualmente", "not approved", "approved")
